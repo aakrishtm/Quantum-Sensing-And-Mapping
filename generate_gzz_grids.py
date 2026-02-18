@@ -2,16 +2,8 @@ import numpy as np
 import os
 from tqdm import tqdm
 from qiskit import QuantumCircuit, transpile
-try:
-    # Try newer Qiskit Aer API
-    from qiskit_aer import AerSimulator
-    from qiskit_aer.noise import NoiseModel, phase_damping_error
-except ImportError:
-    # Fall back to older API
-    from qiskit.providers.aer import AerSimulator
-    from qiskit.providers.aer.noise import NoiseModel
-    from qiskit.providers.aer.noise.errors import phase_damping_error
-
+from qiskit_aer import AerSimulator
+from qiskit_aer.noise import NoiseModel, phase_damping_error
 
 def ramsey_circuit(t):
     qc = QuantumCircuit(1, 1)
@@ -21,10 +13,8 @@ def ramsey_circuit(t):
     qc.measure(0, 0)
     return qc
 
-
 def damping_probability(rho, t):
     return 1 - np.exp(-rho * t)
-
 
 def compute_Gzz_at(rho_value, t, backend, shots=1000):
     p = damping_probability(rho_value, t)
@@ -46,7 +36,6 @@ def compute_Gzz_at(rho_value, t, backend, shots=1000):
     
     return Gzz
 
-
 def density_to_gzz_grid(density_grid, t_evolution=30e-6, shots=500):
     N, M = density_grid.shape
     Gzz_grid = np.zeros((N, M))
@@ -62,7 +51,6 @@ def density_to_gzz_grid(density_grid, t_evolution=30e-6, shots=500):
                 pbar.update(1)
     
     return Gzz_grid
-
 
 def process_training_data(data_dir='training_data', t_evolution=30e-6, shots=500):
     """
@@ -107,7 +95,6 @@ def process_training_data(data_dir='training_data', t_evolution=30e-6, shots=500
     
     print("All Gzz grids generated!")
 
-
 if __name__ == "__main__":
     import argparse
     
@@ -133,4 +120,3 @@ if __name__ == "__main__":
     else:
         # Process all samples
         process_training_data(args.data_dir, args.t_evolution, args.shots)
-

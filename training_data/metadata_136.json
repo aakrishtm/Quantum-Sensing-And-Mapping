@@ -1,0 +1,10 @@
+{
+  "seed": 136,
+  "has_tunnel": false,
+  "num_tunnels": 0,
+  "tunnels": [],
+  "grid_shape": [
+    60,
+    150
+  ]
+}

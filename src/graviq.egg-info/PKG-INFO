@@ -1,0 +1,48 @@
+Metadata-Version: 2.4
+Name: graviq
+Version: 0.1.0
+Summary: Simulating Subsurface Mapping with a Qubit-Based Gravimeter
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.0.0
+Requires-Dist: torchvision>=0.15.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: matplotlib>=3.7.0
+Requires-Dist: tensorboard>=2.13.0
+Requires-Dist: tqdm>=4.65.0
+Requires-Dist: flask>=2.3.0
+Requires-Dist: qiskit>=0.45.0
+Requires-Dist: qiskit-aer>=0.13.0
+Provides-Extra: dev
+
+# GraviQ: Simulating Subsurface Mapping with a Qubit-Based Gravimeter
+
+Our project simulates how a cold-atom–based quantum gravimeter could be used for subsurface mapping entirely in software. We begin by constructing a simplified subsurface model in which we assign densities to points in a 1D line or 2D grid, introducing features such as low-density voids or high-density ore regions.
+
+## Quickstart
+
+```bash
+git clone <repo-url>
+cd GraviQ-quantum-sensing
+make install
+make data    # Generate full training data (density_grid + tunnel_mask + metadata)
+make train   # Train the model
+make infer   # Run inference and produce example plot
+```
+
+- **`make install`** — installs the package in editable mode (`pip install -e .`).
+- **`make data`** — generates training data (500 samples with density grids, tunnel masks, metadata).
+- **`make train`** — trains the model; saves `checkpoints/best_model.pth`.
+- **`make infer`** — runs inference (needs trained model and `training_data/`).
+
+To run the web demo: `make run-app` or `python app.py`.
+
+## Development
+
+- **Train:** `make train` (calls `scripts/train.py`).
+- **Test (placeholder):** `make test` — currently just checks `import graviq`.
+
+## Package layout
+
+- `src/graviq/` — main package: `data/`, `models/`, `sim/`, `viz/`, training and inference logic.
+- `scripts/` — thin entrypoints: `train.py`, `infer.py`, `app.py`.
