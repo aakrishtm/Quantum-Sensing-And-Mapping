@@ -1,13 +1,19 @@
 import os
-import numpy as np
 import json
+import logging
+import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
+
+logger = logging.getLogger(__name__)
 
 
 class TunnelDataset(Dataset):
     """
     Dataset for tunnel detection/segmentation from density grids.
+
+    Only samples with BOTH density_grid_*.npy and tunnel_mask_*.npy are included.
+    Missing masks (or inputs) are skipped without crashing.
 
     Returns:
         - density_grid: (1, H, W) tensor - input
@@ -24,29 +30,46 @@ class TunnelDataset(Dataset):
         self.data_dir = data_dir
         self.transform = transform
 
-        # Find samples that have all required files (density_grid, tunnel_mask, metadata)
-        self.samples = []
-        for filename in sorted(os.listdir(data_dir)):
+        # Scan data_dir and collect sample_ids where BOTH input and mask exist
+        if not os.path.isdir(data_dir):
+            raise FileNotFoundError(
+                f"Data directory does not exist: {data_dir}. Run: make data"
+            )
+
+        all_input_ids = set()
+        valid_ids = []
+
+        for filename in os.listdir(data_dir):
             if filename.startswith('density_grid_') and filename.endswith('.npy'):
                 sample_id = filename.replace('density_grid_', '').replace('.npy', '')
+                all_input_ids.add(sample_id)
+                density_path = os.path.join(data_dir, f'density_grid_{sample_id}.npy')
                 mask_path = os.path.join(data_dir, f'tunnel_mask_{sample_id}.npy')
-                meta_path = os.path.join(data_dir, f'metadata_{sample_id}.json')
-                if os.path.exists(mask_path) and os.path.exists(meta_path):
-                    self.samples.append(sample_id)
+                if os.path.exists(density_path) and os.path.exists(mask_path):
+                    valid_ids.append(sample_id)
 
-        if not self.samples:
+        self.sample_ids = sorted(valid_ids)
+        skipped = len(all_input_ids) - len(self.sample_ids)
+
+        if skipped > 0:
+            logger.warning(
+                "Found %d valid samples in %s (%d skipped: missing input or mask).",
+                len(self.sample_ids), data_dir, skipped
+            )
+        else:
+            logger.info("Found %d valid samples in %s.", len(self.sample_ids), data_dir)
+
+        if not self.sample_ids:
             raise FileNotFoundError(
                 f"No complete samples found in {data_dir}. Each sample needs "
-                "density_grid_*.npy, tunnel_mask_*.npy, and metadata_*.json. "
-                "Run: python density_grid_generator.py  (or make data)"
+                "density_grid_*.npy and tunnel_mask_*.npy. Run: make data"
             )
-        print(f"Found {len(self.samples)} complete samples in {data_dir}")
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.sample_ids)
 
     def __getitem__(self, idx):
-        sample_id = self.samples[idx]
+        sample_id = self.sample_ids[idx]
 
         # Load density grid (input)
         density_path = os.path.join(self.data_dir, f'density_grid_{sample_id}.npy')
@@ -56,10 +79,14 @@ class TunnelDataset(Dataset):
         mask_path = os.path.join(self.data_dir, f'tunnel_mask_{sample_id}.npy')
         tunnel_mask = np.load(mask_path).astype(np.float32)
 
-        # Load metadata
+        # Load metadata (optional; infer from mask if missing)
         metadata_path = os.path.join(self.data_dir, f'metadata_{sample_id}.json')
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
+        if os.path.exists(metadata_path):
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+        else:
+            has_tunnel = bool(np.any(tunnel_mask > 0.5))
+            metadata = {'has_tunnel': has_tunnel, 'num_tunnels': 1 if has_tunnel else 0}
 
         # Add channel dimension: (H, W) -> (1, H, W)
         density_grid = density_grid[np.newaxis, ...]

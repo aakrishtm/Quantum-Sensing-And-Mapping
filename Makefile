@@ -19,5 +19,5 @@ run-app:
 	$(PYTHON) scripts/app.py
 
 test:
-	@echo "Tests placeholder - add pytest later"
 	$(PYTHON) -c "import graviq; print('graviq OK')"
+	$(PYTHON) -m unittest tests.test_dataset_pairs -v
