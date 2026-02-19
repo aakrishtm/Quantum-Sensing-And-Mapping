@@ -6,14 +6,22 @@ Dispatches to torch or numpy based on input type.
 from __future__ import annotations
 
 import numpy as np
+from typing import Union, Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import torch
+    ArrayType = Union[np.ndarray, torch.Tensor]
+else:
+    ArrayType = Any
+
 
 # Lazy torch import
-def _import_torch():
+def _import_torch() -> Any:
     import torch
     return torch
 
 
-def _backend(x) -> str:
+def _backend(x: ArrayType) -> str:
     """Detect backend: 'torch' or 'numpy'."""
     if hasattr(x, "numpy") and callable(getattr(x, "numpy")):
         return "torch"
@@ -33,7 +41,7 @@ def _gaussian_kernel_1d(sigma: float, length: int) -> np.ndarray:
     return (k / k.sum()).astype(np.float32)
 
 
-def add_blur(x, sigma: float):
+def add_blur(x: ArrayType, sigma: float) -> ArrayType:
     """
     Gaussian blur via separable 1D convolution.
     x: 2D array (H, W) - numpy or torch.
@@ -67,7 +75,7 @@ def _add_blur_numpy(x: np.ndarray, sigma: float) -> np.ndarray:
     return out.astype(x.dtype)
 
 
-def _add_blur_torch(x, sigma: float):
+def _add_blur_torch(x: "torch.Tensor", sigma: float) -> "torch.Tensor":
     import torch
     import torch.nn.functional as F
 
@@ -85,7 +93,7 @@ def _add_blur_torch(x, sigma: float):
     return y.squeeze(0).squeeze(0)
 
 
-def add_gaussian_noise(x, sigma: float, seed=None):
+def add_gaussian_noise(x: ArrayType, sigma: float, seed: Optional[int] = None) -> ArrayType:
     """Add N(0, sigma²) noise. Returns a copy with noise added."""
     bk = _backend(x)
     if bk == "numpy":
@@ -93,7 +101,7 @@ def add_gaussian_noise(x, sigma: float, seed=None):
     return _add_gaussian_noise_torch(x, sigma, seed)
 
 
-def _add_gaussian_noise_numpy(x: np.ndarray, sigma: float, seed=None) -> np.ndarray:
+def _add_gaussian_noise_numpy(x: np.ndarray, sigma: float, seed: Optional[int] = None) -> np.ndarray:
     if seed is not None:
         rng = np.random.default_rng(seed)
         noise = rng.normal(0, sigma, x.shape).astype(x.dtype)
@@ -102,7 +110,7 @@ def _add_gaussian_noise_numpy(x: np.ndarray, sigma: float, seed=None) -> np.ndar
     return (x.astype(np.float64) + noise).astype(x.dtype)
 
 
-def _add_gaussian_noise_torch(x, sigma: float, seed=None):
+def _add_gaussian_noise_torch(x: "torch.Tensor", sigma: float, seed: Optional[int] = None) -> "torch.Tensor":
     import torch
     if seed is not None:
         gen = torch.Generator(device=x.device).manual_seed(seed)
@@ -112,7 +120,7 @@ def _add_gaussian_noise_torch(x, sigma: float, seed=None):
     return (x + noise).clone()
 
 
-def add_shot_noise(x, scale: float, seed=None):
+def add_shot_noise(x: ArrayType, scale: float, seed: Optional[int] = None) -> ArrayType:
     """
     Normalize x to [0,1], sample Poisson(scale * normalized), rescale back.
     """
@@ -122,7 +130,7 @@ def add_shot_noise(x, scale: float, seed=None):
     return _add_shot_noise_torch(x, scale, seed)
 
 
-def _add_shot_noise_numpy(x: np.ndarray, scale: float, seed=None) -> np.ndarray:
+def _add_shot_noise_numpy(x: np.ndarray, scale: float, seed: Optional[int] = None) -> np.ndarray:
     x = x.astype(np.float64)
     x_clip = np.clip(x, 0, None)
     m = float(np.max(x_clip)) if np.max(x_clip) > 0 else 1.0
@@ -137,7 +145,7 @@ def _add_shot_noise_numpy(x: np.ndarray, scale: float, seed=None) -> np.ndarray:
     return (out * m).astype(x.dtype)
 
 
-def _add_shot_noise_torch(x, scale: float, seed=None):
+def _add_shot_noise_torch(x: "torch.Tensor", scale: float, seed: Optional[int] = None) -> "torch.Tensor":
     import torch
     x = x.to(torch.float64)
     x_clip = torch.clamp(x, min=0)
@@ -153,7 +161,7 @@ def _add_shot_noise_torch(x, scale: float, seed=None):
     return (out * m).to(x.dtype)
 
 
-def add_low_freq_drift(x, strength: float, kernel_size: int = 15):
+def add_low_freq_drift(x: ArrayType, strength: float, kernel_size: int = 15) -> ArrayType:
     """
     Generate smooth random field via Gaussian blur of white noise,
     scale by strength, add to x. Uses RNG state set by caller (e.g. apply_sensor_model).
@@ -186,7 +194,7 @@ def _add_low_freq_drift_numpy(x: np.ndarray, strength: float, kernel_size: int) 
     return (x.astype(np.float64) + strength * blurred).astype(x.dtype)
 
 
-def _add_low_freq_drift_torch(x, strength: float, kernel_size: int):
+def _add_low_freq_drift_torch(x: "torch.Tensor", strength: float, kernel_size: int) -> "torch.Tensor":
     import torch
 
     if strength <= 0:
@@ -205,7 +213,7 @@ def _add_low_freq_drift_torch(x, strength: float, kernel_size: int):
     return (x + strength * blurred).clone()
 
 
-def apply_sensor_model(x, cfg: dict, seed=None):
+def apply_sensor_model(x: ArrayType, cfg: Dict[str, Any], seed: Optional[int] = None) -> ArrayType:
     """
     Compose: x -> blur -> drift -> gaussian -> shot.
     cfg keys: blur_sigma, drift_strength, drift_kernel_size, gaussian_sigma, shot_scale.
@@ -222,19 +230,19 @@ def apply_sensor_model(x, cfg: dict, seed=None):
     out = x
     blur_sigma = cfg.get("blur_sigma", 0)
     if blur_sigma > 0:
-        out = add_blur(out, blur_sigma)
+        out = add_blur(out, float(blur_sigma))
 
     drift_strength = cfg.get("drift_strength", 0)
     drift_kernel_size = int(cfg.get("drift_kernel_size", 15))
     if drift_strength > 0:
-        out = add_low_freq_drift(out, drift_strength, drift_kernel_size)
+        out = add_low_freq_drift(out, float(drift_strength), drift_kernel_size)
 
     gaussian_sigma = cfg.get("gaussian_sigma", 0)
     if gaussian_sigma > 0:
-        out = add_gaussian_noise(out, gaussian_sigma, seed)
+        out = add_gaussian_noise(out, float(gaussian_sigma), seed)
 
     shot_scale = cfg.get("shot_scale", 0)
     if shot_scale > 0:
-        out = add_shot_noise(out, shot_scale, seed)
+        out = add_shot_noise(out, float(shot_scale), seed)
 
     return out

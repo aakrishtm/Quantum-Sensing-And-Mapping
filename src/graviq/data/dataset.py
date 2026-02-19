@@ -91,30 +91,39 @@ class TunnelDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         sample_id = self.sample_ids[idx]
 
-        # Load density grid (input)
-        density_path = os.path.join(self.data_dir, f'gzz_grid_{sample_id}.npy')
-        density_grid = np.load(density_path).astype(np.float32)
+        # 1. Load the clean Gzz grid
+        gzz_path = os.path.join(self.data_dir, f'gzz_grid_{sample_id}.npy')
+        gzz_grid = np.load(gzz_path).astype(np.float32)
 
-        # Optionally apply interferometer model (phase -> signal) before noise
-        if self.interferometer_cfg:
-            density_grid = apply_interferometer_model(
-                density_grid, self.interferometer_cfg, seed=None
-            )
-            density_grid = np.asarray(density_grid, dtype=np.float32)
+        # 2. INJECT NOISE DURING TRAINING
+        # We force the model to see noise so it learns to be a "denoiser"
+        # Using a random sigma makes the AI robust to different noise levels
+        noise_sigma = float(np.random.uniform(1.0, 2.5))
+        gzz_grid = apply_sensor_model(gzz_grid, {'gaussian_sigma': noise_sigma}, seed=None)
+        gzz_grid = np.asarray(gzz_grid, dtype=np.float32)
 
-        # Optionally apply sensor noise to input only (never to mask)
-        if self.sensor_noise:
-            noise_seed = (self.seed + idx) if self.seed is not None else None
-            density_grid = apply_sensor_model(
-                density_grid, self.sensor_noise_cfg, seed=noise_seed
-            )
-            density_grid = np.asarray(density_grid, dtype=np.float32)
+        # 3. MATCH FLASK LOGIC: Flip Sign and Normalize
+        g = -gzz_grid  # Flip so tunnels are peaks
+        g_min = g.min()
+        g_max = g.max()
+        if g_max - g_min < 1e-9:
+            g_norm = np.zeros_like(g)
+        else:
+            g_norm = (g - g_min) / (g_max - g_min)
 
-        # Load tunnel mask (ground truth)
+        # 4. Load ground truth mask
         mask_path = os.path.join(self.data_dir, f'tunnel_mask_{sample_id}.npy')
         tunnel_mask = np.load(mask_path).astype(np.float32)
 
-        # Load metadata (optional; infer from mask if missing)
+        # Add channel dimension: (H, W) -> (1, H, W)
+        g_norm = g_norm[np.newaxis, ...]
+        tunnel_mask = tunnel_mask[np.newaxis, ...]
+
+        # Convert to tensors
+        input_tensor = torch.from_numpy(g_norm).float()
+        mask_tensor = torch.from_numpy(tunnel_mask).float()
+
+        # Load metadata
         metadata_path = os.path.join(self.data_dir, f'metadata_{sample_id}.json')
         if os.path.exists(metadata_path):
             with open(metadata_path, 'r') as f:
@@ -123,20 +132,9 @@ class TunnelDataset(Dataset):
             has_tunnel = bool(np.any(tunnel_mask > 0.5))
             metadata = {'has_tunnel': has_tunnel, 'num_tunnels': 1 if has_tunnel else 0}
 
-        # Add channel dimension: (H, W) -> (1, H, W)
-        density_grid = density_grid[np.newaxis, ...]
-        tunnel_mask = tunnel_mask[np.newaxis, ...]
-
-        # Convert to tensors
-        density_grid = torch.from_numpy(density_grid)
-        tunnel_mask = torch.from_numpy(tunnel_mask)
-
-        if self.transform:
-            density_grid, tunnel_mask = self.transform(density_grid, tunnel_mask)
-
         return {
-            'input': density_grid,
-            'mask': tunnel_mask,
+            'input': input_tensor,
+            'mask': mask_tensor,
             'has_tunnel': metadata['has_tunnel'],
             'num_tunnels': metadata['num_tunnels'],
             'sample_id': sample_id

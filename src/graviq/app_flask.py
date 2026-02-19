@@ -41,10 +41,22 @@ def create_app(template_folder=None):
     model.eval()
 
     def predict_tunnel(grid, threshold=0.5):
-        g = np.asarray(grid, dtype=np.float32)
-        prob_map, binary_mask, has_tunnel = model_predict(model, g, device, threshold)
+        # 1. Match Training Exactly: Flip sign so tunnels are positive peaks
+        g = -np.asarray(grid, dtype=np.float32)
+        
+        # 2. Min-Max Scaling [0, 1]
+        g_min = g.min()
+        g_max = g.max()
+        if g_max - g_min < 1e-9:
+            g_norm = np.zeros_like(g)
+        else:
+            g_norm = (g - g_min) / (g_max - g_min)
+        
+        # 3. Run inference 
+        prob_map, binary_mask, has_tunnel = model_predict(model, g_norm, device, threshold)
+        
         confidence = float(prob_map.max())
-        tunnel_pixels = int(np.sum(np.asarray(binary_mask) > 0.5))
+        tunnel_pixels = int(np.sum(binary_mask > 0.5))
         return prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels
 
     def compute_metrics(pred_mask, gt_mask):
@@ -180,16 +192,15 @@ def create_app(template_folder=None):
         try:
             density_grid, tunnel_mask, metadata = generate_random_grid()
             gzz_grid = gzz_approximation(density_grid, t_evolution=30e-6)
-            # Simulate quantum shot noise: baseline struggles, AI denoises
+
             seed_val = metadata.get('seed', 0)
-            gzz_grid = apply_sensor_model(gzz_grid, {'gaussian_sigma': 0.35}, seed=int(seed_val) if seed_val is not None else None)
+            gzz_grid = apply_sensor_model(gzz_grid, {'gaussian_sigma': 2.0}, seed=int(seed_val) if seed_val is not None else None)
             
-            # Baseline: MUST use noisy gzz (not density). Invert so low=tunnel for threshold.
             density_like = np.asarray(-gzz_grid, dtype=np.float32)
-            baseline_mask = baseline_predict(density_like, {'z': 2.0, 'min_size': 50})
+            baseline_mask = baseline_predict(density_like, {'z': 2.0, 'min_size': 20})
             baseline_mask = np.asarray(baseline_mask, dtype=np.float32)
 
-            # AI prediction on same noisy gzz (model denoises)
+            # AI prediction
             prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels = predict_tunnel(gzz_grid)
             binary_mask = np.asarray(binary_mask, dtype=np.float32)
 
