@@ -73,5 +73,90 @@ class TestDatasetPairs(unittest.TestCase):
             self.assertEqual(sample["mask"].shape[0], 1)
 
 
+class TestDatasetSensorNoise(unittest.TestCase):
+    """Test that sensor noise is applied only to input, shape preserved, mask unchanged."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        shape = (60, 150)
+        for i in (1, 2):
+            sample_id = f"{i:03d}"
+            np.save(
+                os.path.join(self.temp_dir, f"density_grid_{sample_id}.npy"),
+                np.random.rand(*shape).astype(np.float32),
+            )
+            np.save(
+                os.path.join(self.temp_dir, f"tunnel_mask_{sample_id}.npy"),
+                (np.random.rand(*shape) > 0.9).astype(np.float32),
+            )
+            with open(
+                os.path.join(self.temp_dir, f"metadata_{sample_id}.json"), "w"
+            ) as f:
+                json.dump({"has_tunnel": True, "num_tunnels": 1}, f)
+
+    def tearDown(self):
+        import shutil
+        if os.path.isdir(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_noise_changes_input_shape_unchanged(self):
+        """With sensor_noise=True, output shape is unchanged."""
+        ds = TunnelDataset(
+            self.temp_dir,
+            sensor_noise=True,
+            sensor_noise_cfg={"gaussian_sigma": 0.1},
+        )
+        sample = ds[0]
+        self.assertEqual(sample["input"].shape, (1, 60, 150))
+        self.assertEqual(sample["mask"].shape, (1, 60, 150))
+
+    def test_noise_changes_values(self):
+        """With sensor_noise=True, input values differ from no-noise."""
+        ds_no_noise = TunnelDataset(self.temp_dir)
+        ds_noise = TunnelDataset(
+            self.temp_dir,
+            sensor_noise=True,
+            sensor_noise_cfg={"gaussian_sigma": 0.2},
+            seed=42,
+        )
+        clean = ds_no_noise[0]["input"]
+        noisy = ds_noise[0]["input"]
+        self.assertFalse(
+            np.allclose(clean.numpy(), noisy.numpy()),
+            "Noisy input should differ from clean",
+        )
+
+    def test_mask_unchanged_by_noise(self):
+        """Mask is identical with or without sensor_noise."""
+        ds_no_noise = TunnelDataset(self.temp_dir)
+        ds_noise = TunnelDataset(
+            self.temp_dir,
+            sensor_noise=True,
+            sensor_noise_cfg={"gaussian_sigma": 0.1},
+            seed=99,
+        )
+        mask_clean = ds_no_noise[0]["mask"]
+        mask_noisy = ds_noise[0]["mask"]
+        np.testing.assert_array_almost_equal(
+            mask_clean.numpy(), mask_noisy.numpy(),
+            err_msg="Mask must be unchanged when sensor_noise is applied",
+        )
+
+    def test_noise_deterministic_with_seed(self):
+        """Same seed+idx yields same noisy input."""
+        ds = TunnelDataset(
+            self.temp_dir,
+            sensor_noise=True,
+            sensor_noise_cfg={"gaussian_sigma": 0.1},
+            seed=123,
+        )
+        a = ds[0]["input"]
+        b = ds[0]["input"]
+        np.testing.assert_array_almost_equal(
+            a.numpy(), b.numpy(),
+            err_msg="Same index and seed should give identical noisy input",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

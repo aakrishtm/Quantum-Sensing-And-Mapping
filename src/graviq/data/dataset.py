@@ -5,6 +5,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+from graviq.physics import apply_sensor_model
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,14 +23,28 @@ class TunnelDataset(Dataset):
         - metadata: dict with labels
     """
 
-    def __init__(self, data_dir, transform=None):
+    def __init__(
+        self,
+        data_dir,
+        transform=None,
+        *,
+        sensor_noise: bool = False,
+        sensor_noise_cfg: dict | None = None,
+        seed: int | None = None,
+    ):
         """
         Args:
             data_dir: Directory containing density_grid_*.npy, tunnel_mask_*.npy, metadata_*.json
             transform: Optional transforms to apply
+            sensor_noise: If True, apply sensor noise model to the input grid only.
+            sensor_noise_cfg: Config dict for apply_sensor_model (blur_sigma, gaussian_sigma, etc.).
+            seed: Optional RNG seed; noise uses seed+idx per sample when set.
         """
         self.data_dir = data_dir
         self.transform = transform
+        self.sensor_noise = sensor_noise
+        self.sensor_noise_cfg = sensor_noise_cfg if sensor_noise_cfg is not None else {}
+        self.seed = seed
 
         # Scan data_dir and collect sample_ids where BOTH input and mask exist
         if not os.path.isdir(data_dir):
@@ -74,6 +90,14 @@ class TunnelDataset(Dataset):
         # Load density grid (input)
         density_path = os.path.join(self.data_dir, f'density_grid_{sample_id}.npy')
         density_grid = np.load(density_path).astype(np.float32)
+
+        # Optionally apply sensor noise to input only (never to mask)
+        if self.sensor_noise:
+            noise_seed = (self.seed + idx) if self.seed is not None else None
+            density_grid = apply_sensor_model(
+                density_grid, self.sensor_noise_cfg, seed=noise_seed
+            )
+            density_grid = np.asarray(density_grid, dtype=np.float32)
 
         # Load tunnel mask (ground truth)
         mask_path = os.path.join(self.data_dir, f'tunnel_mask_{sample_id}.npy')
