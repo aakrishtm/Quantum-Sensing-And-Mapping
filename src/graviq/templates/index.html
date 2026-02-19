@@ -3,34 +3,524 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GraviQ Tunnel Detection</title>
+    <title>GraviQ | Quantum Tunnel Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0b0e14 0%, #1a1f29 100%);
+            color: #e0e6ed;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #1a1f29;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            border: 1px solid #2d333f;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #2d333f;
+        }
+
+        h1 {
+            color: #4ade80;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(74, 222, 128, 0.3);
+        }
+
+        .subtitle {
+            color: #8892b0;
+            font-size: 1rem;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 70, 229, 0.5);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #2d333f 0%, #3d4455 100%);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #3d4455 0%, #4a5568 100%);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .file-upload-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .file-upload-wrapper input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #0b0e14 0%, #1a1f29 100%);
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #4ade80;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-card.baseline {
+            border-left-color: #8892b0;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #8892b0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            color: #4ade80;
+            font-weight: 700;
+            display: block;
+        }
+
+        .stat-card.baseline .stat-value {
+            color: #8892b0;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .comparison-card {
+            background: #0b0e14;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #2d333f;
+        }
+
+        .comparison-card h3 {
+            color: #4ade80;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .comparison-card.baseline h3 {
+            color: #8892b0;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #2d333f;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            color: #8892b0;
+            font-size: 0.9rem;
+        }
+
+        .metric-value {
+            color: #e0e6ed;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .metric-value.highlight {
+            color: #4ade80;
+        }
+
+        .viz-container {
+            background: #0b0e14;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #2d333f;
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .viz-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .loading {
+            display: none;
+            color: #4ade80;
+            font-size: 1.1rem;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .error {
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .error.active {
+            display: block;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #8892b0;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .legend-color.green { background: #4ade80; }
+        .legend-color.red { background: #ef4444; }
+        .legend-color.blue { background: #3b82f6; }
+
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+            }
+
+            .stats-bar {
+                grid-template-columns: 1fr;
+            }
+
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-    <h1>GraviQ: Tunnel Detection Demo</h1>
-    <p>Generate a random density grid or upload a .npy file to run tunnel detection.</p>
-    <button id="generate">Generate random grid</button>
-    <form id="upload-form">
-        <input type="file" name="file" accept=".npy">
-        <button type="submit">Upload .npy</button>
-    </form>
-    <div id="result"></div>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>GraviQ</h1>
+            <p class="subtitle">Quantum Tunnel Detection System</p>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="generate">Generate Random Sample</button>
+            <div class="file-upload-wrapper">
+                <button class="btn btn-secondary">Upload .npy File</button>
+                <input type="file" id="file-input" accept=".npy" style="display: none;">
+            </div>
+        </div>
+
+        <div class="loading" id="loading">Processing quantum sensor data...</div>
+        <div class="error" id="error"></div>
+
+        <div id="results" style="display: none;">
+            <div class="stats-bar" id="stats-bar"></div>
+            <div class="comparison-grid" id="comparison-grid"></div>
+            <div class="viz-container">
+                <img id="result-image" alt="Visualization">
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color green"></div>
+                        <span>True Positive</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color red"></div>
+                        <span>False Negative</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color blue"></div>
+                        <span>False Positive</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
-        document.getElementById('generate').onclick = async () => {
-            const res = await fetch('/generate', { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                document.getElementById('result').innerHTML = '<img src="data:image/png;base64,' + data.image + '" alt="Result">';
+        const generateBtn = document.getElementById('generate');
+        const fileInput = document.getElementById('file-input');
+        const fileUploadBtn = document.querySelector('.file-upload-wrapper .btn');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const results = document.getElementById('results');
+        const statsBar = document.getElementById('stats-bar');
+        const comparisonGrid = document.getElementById('comparison-grid');
+        const resultImage = document.getElementById('result-image');
+
+        fileUploadBtn.addEventListener('click', () => fileInput.click());
+
+        generateBtn.addEventListener('click', async () => {
+            await handleRequest('/generate', 'POST');
+        });
+
+        fileInput.addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                const formData = new FormData();
+                formData.append('file', e.target.files[0]);
+                await handleRequest('/upload', 'POST', formData);
             }
-        };
-        document.getElementById('upload-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const res = await fetch('/upload', { method: 'POST', body: formData });
-            const data = await res.json();
-            if (data.success) {
-                document.getElementById('result').innerHTML = '<img src="data:image/png;base64,' + data.image + '" alt="Result">';
+        });
+
+        async function handleRequest(url, method, body = null) {
+            loading.classList.add('active');
+            error.classList.remove('active');
+            results.style.display = 'none';
+
+            try {
+                const options = {
+                    method: method,
+                    headers: body instanceof FormData ? {} : { 'Content-Type': 'application/json' }
+                };
+                if (body) options.body = body;
+
+                const res = await fetch(url, options);
+                const data = await res.json();
+
+                if (data.success) {
+                    displayResults(data);
+                } else {
+                    showError(data.error || 'Unknown error occurred');
+                }
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                loading.classList.remove('active');
             }
-        };
+        }
+
+        function displayResults(data) {
+            // Display image
+            resultImage.src = 'data:image/png;base64,' + data.image;
+            results.style.display = 'block';
+
+            // Display stats
+            let statsHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">AI Detection</div>
+                    <div class="stat-value">${data.ai.has_tunnel ? '✓ TUNNEL' : '✗ CLEAR'}</div>
+                </div>
+            `;
+            
+            if (data.ai.dice !== undefined) {
+                statsHTML += `
+                    <div class="stat-card">
+                        <div class="stat-label">AI Dice Score</div>
+                        <div class="stat-value">${(data.ai.dice * 100).toFixed(1)}%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">AI IoU Score</div>
+                        <div class="stat-value">${(data.ai.iou * 100).toFixed(1)}%</div>
+                    </div>
+                `;
+            }
+            
+            if (data.baseline && data.baseline.dice !== undefined) {
+                statsHTML += `
+                    <div class="stat-card baseline">
+                        <div class="stat-label">Baseline Dice</div>
+                        <div class="stat-value">${(data.baseline.dice * 100).toFixed(1)}%</div>
+                    </div>
+                    <div class="stat-card baseline">
+                        <div class="stat-label">Baseline IoU</div>
+                        <div class="stat-value">${(data.baseline.iou * 100).toFixed(1)}%</div>
+                    </div>
+                `;
+            }
+            
+            if (data.ground_truth) {
+                statsHTML += `
+                    <div class="stat-card">
+                        <div class="stat-label">Ground Truth</div>
+                        <div class="stat-value">${data.ground_truth.has_tunnel ? `${data.ground_truth.num_tunnels} TUNNEL${data.ground_truth.num_tunnels > 1 ? 'S' : ''}` : 'CLEAR'}</div>
+                    </div>
+                `;
+            }
+            
+            statsBar.innerHTML = statsHTML;
+
+            // Display comparison
+            if (data.baseline && data.ai.dice !== undefined && data.baseline.dice !== undefined) {
+                const aiImprovement = ((data.ai.dice - data.baseline.dice) * 100).toFixed(1);
+                const iouImprovement = ((data.ai.iou - data.baseline.iou) * 100).toFixed(1);
+                
+                comparisonGrid.innerHTML = `
+                    <div class="comparison-card">
+                        <h3>AI Model (U-Net)</h3>
+                        <div class="metric-row">
+                            <span class="metric-label">Dice Score</span>
+                            <span class="metric-value highlight">${(data.ai.dice * 100).toFixed(2)}%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">IoU Score</span>
+                            <span class="metric-value highlight">${(data.ai.iou * 100).toFixed(2)}%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Confidence</span>
+                            <span class="metric-value">${(data.ai.confidence * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Tunnel Pixels</span>
+                            <span class="metric-value">${data.ai.tunnel_pixels}</span>
+                        </div>
+                    </div>
+                    <div class="comparison-card baseline">
+                        <h3>Baseline (Threshold)</h3>
+                        <div class="metric-row">
+                            <span class="metric-label">Dice Score</span>
+                            <span class="metric-value">${(data.baseline.dice * 100).toFixed(2)}%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">IoU Score</span>
+                            <span class="metric-value">${(data.baseline.iou * 100).toFixed(2)}%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Improvement</span>
+                            <span class="metric-value highlight">+${aiImprovement}% Dice</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Tunnel Pixels</span>
+                            <span class="metric-value">${data.baseline.tunnel_pixels}</span>
+                        </div>
+                    </div>
+                `;
+            } else if (data.baseline) {
+                // No ground truth, just show predictions
+                comparisonGrid.innerHTML = `
+                    <div class="comparison-card">
+                        <h3>AI Model (U-Net)</h3>
+                        <div class="metric-row">
+                            <span class="metric-label">Confidence</span>
+                            <span class="metric-value highlight">${(data.ai.confidence * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Tunnel Pixels</span>
+                            <span class="metric-value">${data.ai.tunnel_pixels}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Detection</span>
+                            <span class="metric-value">${data.ai.has_tunnel ? 'Tunnel Found' : 'Clear'}</span>
+                        </div>
+                    </div>
+                    <div class="comparison-card baseline">
+                        <h3>Baseline (Threshold)</h3>
+                        <div class="metric-row">
+                            <span class="metric-label">Tunnel Pixels</span>
+                            <span class="metric-value">${data.baseline.tunnel_pixels}</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Detection</span>
+                            <span class="metric-value">${data.baseline.tunnel_pixels > 0 ? 'Tunnel Found' : 'Clear'}</span>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function showError(message) {
+            error.textContent = `Error: ${message}`;
+            error.classList.add('active');
+        }
     </script>
 </body>
 </html>
