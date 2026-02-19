@@ -1,0 +1,18 @@
+# Artifacts / generated outputs
+checkpoints/
+runs/
+evaluation_results/
+training_data/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# egg-info (build artifacts)
+*.egg-info/
+src/*.egg-info/
+
+# OS junk
+.DS_Store
