@@ -20,4 +20,4 @@ run-app:
 
 test:
 	$(PYTHON) -c "import graviq; print('graviq OK')"
-	$(PYTHON) -m unittest tests.test_dataset_pairs -v
+	$(PYTHON) -m unittest tests.test_dataset_pairs tests.test_noise -v
