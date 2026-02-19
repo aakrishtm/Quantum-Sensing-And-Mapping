@@ -298,6 +298,19 @@
             margin-bottom: 20px;
             font-size: 0.95rem;
         }
+        .overview-desc p { margin-bottom: 12px; }
+        .dice-legend {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .dice-legend li {
+            margin-bottom: 12px;
+            color: #9ca3af;
+        }
+        .dice-legend li:last-child { margin-bottom: 0; }
+        .dice-legend strong { color: #e5e7eb; }
+        .dice-legend li:last-child strong { color: #4ade80; }
         .overview-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -363,10 +376,27 @@
         
         <section class="system-overview">
             <h3 class="overview-title">System Overview</h3>
-            <p class="overview-desc">
-                This system simulates <strong>Quantum Gravimetry</strong>: atom interferometry for underground structure detection.
-                Traditional sensors struggle with <strong>Quantum Shot Noise</strong>—random fluctuations that obscure the gravity signal.
-            </p>
+            <div class="overview-desc">
+                <p>
+                    This system simulates atom interferometry for underground structure detection.
+                    Traditional sensors struggle with <strong>Quantum Shot Noise</strong>—random fluctuations that obscure the gravity signal.
+                    The Dice Coefficient (also called the F1 Score) measures overlap between the AI's tunnel prediction and the actual tunnel (Ground Truth).
+                </p>
+                <ul class="dice-legend">
+                    <li>
+                        <strong>● Perfect Alignment (1.0 / 100%):</strong>
+                        The AI's prediction and the real tunnel overlap perfectly.
+                    </li>
+                    <li>
+                        <strong>● Zero Agreement (0.0 / 0%):</strong>
+                        The AI missed the tunnel or hallucinated a structure in the wrong location.
+                    </li>
+                    <li>
+                        <strong>● Why not "Accuracy"?</strong>
+                        In gravity mapping, 95% is solid rock. A model guessing "nothing" gets 95% accuracy. Dice forces precision on actual <strong>tunnel pixels</strong>.
+                    </li>
+                </ul>
+            </div>
             <div class="overview-grid">
                 <div class="overview-card problem">
                     <strong>Baseline (Traditional Math)</strong>

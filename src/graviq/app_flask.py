@@ -40,23 +40,19 @@ def create_app(template_folder=None):
     model = model.to(device)
     model.eval()
 
-    def predict_tunnel(density_grid, threshold=0.5):
-        prob_map, binary_mask, has_tunnel = model_predict(model, density_grid, device, threshold)
+    def predict_tunnel(grid, threshold=0.5):
+        g = np.asarray(grid, dtype=np.float32)
+        prob_map, binary_mask, has_tunnel = model_predict(model, g, device, threshold)
         confidence = float(prob_map.max())
-        tunnel_pixels = int(binary_mask.sum())
+        tunnel_pixels = int(np.sum(np.asarray(binary_mask) > 0.5))
         return prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels
 
     def compute_metrics(pred_mask, gt_mask):
-        """
-        Compute Dice and IoU by comparing binary prediction vs ground truth.
-        pred_mask: AI or baseline prediction (H,W), values 0/1 or prob
-        gt_mask: tunnel_mask from make_grid (H,W), values 0/1
-        """
+        """Dice/IoU: pred_mask (AI or baseline binary) vs gt_mask (tunnel_mask ground truth)."""
         pred = np.asarray(pred_mask, dtype=np.float32).squeeze()
         gt = np.asarray(gt_mask, dtype=np.float32).squeeze()
         if pred.shape != gt.shape:
             raise ValueError(f"Shape mismatch: pred {pred.shape} vs gt {gt.shape}")
-
         pred_bin = (pred > 0.5).astype(np.float32)
         gt_bin = (gt > 0.5).astype(np.float32)
 
@@ -188,15 +184,18 @@ def create_app(template_folder=None):
             seed_val = metadata.get('seed', 0)
             gzz_grid = apply_sensor_model(gzz_grid, {'gaussian_sigma': 0.35}, seed=int(seed_val) if seed_val is not None else None)
             
-            # AI prediction (model trained on Gzz)
-            prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels = predict_tunnel(gzz_grid)
-            ai_dice, ai_iou = compute_metrics(binary_mask, tunnel_mask)
-            
-            # Baseline: designed for density (low=tunnel). Gzz has high=tunnel, so invert.
-            density_like = -gzz_grid  # tunnel (gzz high) -> low value for baseline
+            # Baseline: MUST use noisy gzz (not density). Invert so low=tunnel for threshold.
+            density_like = np.asarray(-gzz_grid, dtype=np.float32)
             baseline_mask = baseline_predict(density_like, {'z': 2.0, 'min_size': 50})
+            baseline_mask = np.asarray(baseline_mask, dtype=np.float32)
+
+            # AI prediction on same noisy gzz (model denoises)
+            prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels = predict_tunnel(gzz_grid)
+            binary_mask = np.asarray(binary_mask, dtype=np.float32)
+
+            ai_dice, ai_iou = compute_metrics(binary_mask, tunnel_mask)
             baseline_dice, baseline_iou = compute_metrics(baseline_mask, tunnel_mask)
-            
+
             img_base64 = create_visualization(density_grid, gzz_grid, prob_map, binary_mask, baseline_mask, tunnel_mask)
             return jsonify({
                 'success': True,
