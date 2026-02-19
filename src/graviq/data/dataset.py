@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-from graviq.physics import apply_sensor_model
+from graviq.physics import apply_sensor_model, apply_interferometer_model
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class TunnelDataset(Dataset):
         data_dir,
         transform=None,
         *,
+        interferometer_cfg: dict | None = None,
         sensor_noise: bool = False,
         sensor_noise_cfg: dict | None = None,
         seed: int | None = None,
@@ -36,12 +37,14 @@ class TunnelDataset(Dataset):
         Args:
             data_dir: Directory containing density_grid_*.npy, tunnel_mask_*.npy, metadata_*.json
             transform: Optional transforms to apply
+            interferometer_cfg: If set, apply atom-interferometer model (phase -> signal) before noise.
             sensor_noise: If True, apply sensor noise model to the input grid only.
             sensor_noise_cfg: Config dict for apply_sensor_model (blur_sigma, gaussian_sigma, etc.).
             seed: Optional RNG seed; noise uses seed+idx per sample when set.
         """
         self.data_dir = data_dir
         self.transform = transform
+        self.interferometer_cfg = interferometer_cfg
         self.sensor_noise = sensor_noise
         self.sensor_noise_cfg = sensor_noise_cfg if sensor_noise_cfg is not None else {}
         self.seed = seed
@@ -90,6 +93,13 @@ class TunnelDataset(Dataset):
         # Load density grid (input)
         density_path = os.path.join(self.data_dir, f'density_grid_{sample_id}.npy')
         density_grid = np.load(density_path).astype(np.float32)
+
+        # Optionally apply interferometer model (phase -> signal) before noise
+        if self.interferometer_cfg:
+            density_grid = apply_interferometer_model(
+                density_grid, self.interferometer_cfg, seed=None
+            )
+            density_grid = np.asarray(density_grid, dtype=np.float32)
 
         # Optionally apply sensor noise to input only (never to mask)
         if self.sensor_noise:

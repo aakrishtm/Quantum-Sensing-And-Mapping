@@ -31,5 +31,9 @@ To run the web demo: `make run-app` or `python app.py`.
 
 ## Package layout
 
-- `src/graviq/` — main package: `data/`, `models/`, `sim/`, `viz/`, training and inference logic.
+- `src/graviq/` — main package: `data/`, `models/`, `physics/`, `sim/`, `viz/`, training and inference logic.
 - `scripts/` — thin entrypoints: `train.py`, `infer.py`, `app.py`.
+
+## Forward models
+
+The ML pipeline can optionally feed the model **interferometer readout** (normalized signal in [0, 1]) instead of the raw physical field. When the interferometer config is enabled in the dataset, the input is computed as: physical grid → phase shift → (optional wrap) → phase-to-signal → sensor noise. The model then sees a realistic readout rather than raw density or acceleration.

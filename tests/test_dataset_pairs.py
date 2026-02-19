@@ -14,6 +14,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from graviq.data.dataset import TunnelDataset
+from graviq.physics import default_interferometer_cfg
 
 
 class TestDatasetPairs(unittest.TestCase):
@@ -156,6 +157,53 @@ class TestDatasetSensorNoise(unittest.TestCase):
             a.numpy(), b.numpy(),
             err_msg="Same index and seed should give identical noisy input",
         )
+
+
+class TestDatasetInterferometer(unittest.TestCase):
+    """When interferometer config is enabled, input is interferometer readout in [0,1], differing from raw grid."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        shape = (60, 150)
+        for i in (1, 2):
+            sample_id = f"{i:03d}"
+            np.save(
+                os.path.join(self.temp_dir, f"density_grid_{sample_id}.npy"),
+                np.random.rand(*shape).astype(np.float32),
+            )
+            np.save(
+                os.path.join(self.temp_dir, f"tunnel_mask_{sample_id}.npy"),
+                (np.random.rand(*shape) > 0.9).astype(np.float32),
+            )
+            with open(
+                os.path.join(self.temp_dir, f"metadata_{sample_id}.json"), "w"
+            ) as f:
+                json.dump({"has_tunnel": True, "num_tunnels": 1}, f)
+
+    def tearDown(self):
+        import shutil
+        if os.path.isdir(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_interferometer_output_diffs_from_raw_and_in_01(self):
+        """With interferometer_cfg set and no sensor noise, input differs from raw grid and is in [0, 1]."""
+        raw_path = os.path.join(self.temp_dir, "density_grid_001.npy")
+        raw_grid = np.load(raw_path).astype(np.float32)
+
+        ds = TunnelDataset(
+            self.temp_dir,
+            interferometer_cfg=default_interferometer_cfg(),
+            sensor_noise=False,
+        )
+        sample = ds[0]
+        input_grid = sample["input"].squeeze(0).numpy()  # (H, W)
+
+        self.assertFalse(
+            np.allclose(raw_grid, input_grid),
+            "Interferometer readout should differ from raw density grid",
+        )
+        self.assertGreaterEqual(float(np.min(input_grid)), 0.0, "Interferometer signal should be >= 0")
+        self.assertLessEqual(float(np.max(input_grid)), 1.0, "Interferometer signal should be <= 1")
 
 
 if __name__ == "__main__":
