@@ -16,6 +16,7 @@ from graviq.data import make_grid
 from graviq.sim import gzz_approximation
 from graviq.inference import predict as model_predict
 from graviq.baselines import baseline_predict
+from graviq.physics import apply_sensor_model
 
 
 def create_app(template_folder=None):
@@ -46,13 +47,34 @@ def create_app(template_folder=None):
         return prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels
 
     def compute_metrics(pred_mask, gt_mask):
-        """Compute Dice and IoU metrics."""
-        pred = (pred_mask > 0.5).astype(np.float32)
-        gt = (gt_mask > 0.5).astype(np.float32)
-        intersection = (pred * gt).sum()
-        union = pred.sum() + gt.sum() - intersection
-        dice = (2 * intersection + 1e-7) / (pred.sum() + gt.sum() + 1e-7)
-        iou = (intersection + 1e-7) / (union + 1e-7)
+        """
+        Compute Dice and IoU by comparing binary prediction vs ground truth.
+        pred_mask: AI or baseline prediction (H,W), values 0/1 or prob
+        gt_mask: tunnel_mask from make_grid (H,W), values 0/1
+        """
+        pred = np.asarray(pred_mask, dtype=np.float32).squeeze()
+        gt = np.asarray(gt_mask, dtype=np.float32).squeeze()
+        if pred.shape != gt.shape:
+            raise ValueError(f"Shape mismatch: pred {pred.shape} vs gt {gt.shape}")
+
+        pred_bin = (pred > 0.5).astype(np.float32)
+        gt_bin = (gt > 0.5).astype(np.float32)
+
+        intersection = float((pred_bin * gt_bin).sum())
+        pred_sum = float(pred_bin.sum())
+        gt_sum = float(gt_bin.sum())
+        union = pred_sum + gt_sum - intersection
+
+        if pred_sum + gt_sum < 1e-9:
+            dice = 1.0
+        else:
+            dice = (2.0 * intersection + 1e-7) / (pred_sum + gt_sum + 1e-7)
+
+        if union < 1e-9:
+            iou = 1.0 if intersection < 1e-9 else 0.0
+        else:
+            iou = (intersection + 1e-7) / (union + 1e-7)
+
         return float(dice), float(iou)
 
     def create_visualization(density_grid, gzz_grid, prob_map, binary_mask, baseline_mask=None, tunnel_mask=None):
@@ -78,34 +100,38 @@ def create_app(template_folder=None):
             axes[0, 2].axis('off')
             axes[0, 2].set_facecolor('#1a1f29')
             
-            # Row 2: Predictions comparison
-            # AI prediction with overlay
+            # Row 2: Predictions comparison with Quantum X-Ray (alpha blend on gzz)
             h, w = binary_mask.shape
-            ai_overlay = np.zeros((h, w, 3), dtype=np.uint8)
-            ai_pred = (binary_mask > 0.5)
             gt = (tunnel_mask > 0.5)
-            ai_overlay[..., 1] = (ai_pred & gt) * 255  # Green: TP
-            ai_overlay[..., 0] = (gt & ~ai_pred) * 255  # Red: FN
-            ai_overlay[..., 2] = (ai_pred & ~gt) * 255  # Blue: FP
-            
-            axes[1, 0].imshow(ai_overlay.astype(np.uint8), origin='upper')
-            axes[1, 0].set_title('AI Prediction (U-Net)', fontsize=11, fontweight='bold', color='#4ade80')
+            ai_pred = (binary_mask > 0.5)
+            baseline_pred = (baseline_mask > 0.5)
+
+            # Normalize gzz for grayscale display [0,1]
+            gzz_norm = (gzz_grid - np.min(gzz_grid)) / (np.ptp(gzz_grid) + 1e-7)
+            gzz_rgb = np.stack([gzz_norm, gzz_norm, gzz_norm], axis=-1)
+
+            def make_xray_overlay(pred_bin, alpha=0.7):
+                """Alpha blend RGB overlay onto gzz background."""
+                overlay = np.zeros((h, w, 4), dtype=np.float32)
+                overlay[..., 0] = np.where(gt & ~pred_bin, 1.0, 0.0)   # Red: FN
+                overlay[..., 1] = np.where(pred_bin & gt, 1.0, 0.0)     # Green: TP
+                overlay[..., 2] = np.where(pred_bin & ~gt, 1.0, 0.0)   # Blue: FP
+                overlay[..., 3] = np.any(overlay[..., :3] > 0, axis=-1).astype(np.float32) * alpha
+                blended = gzz_rgb.copy()
+                for c in range(3):
+                    blended[..., c] = blended[..., c] * (1 - overlay[..., 3]) + overlay[..., c] * overlay[..., 3]
+                return blended
+
+            axes[1, 0].imshow(make_xray_overlay(ai_pred), origin='upper')
+            axes[1, 0].set_title('AI (U-Net) — Quantum X-Ray', fontsize=11, fontweight='bold', color='#4ade80')
             axes[1, 0].axis('off')
             axes[1, 0].set_facecolor('#1a1f29')
-            
-            # Baseline prediction with overlay
-            baseline_overlay = np.zeros((h, w, 3), dtype=np.uint8)
-            baseline_pred = (baseline_mask > 0.5)
-            baseline_overlay[..., 1] = (baseline_pred & gt) * 255  # Green: TP
-            baseline_overlay[..., 0] = (gt & ~baseline_pred) * 255  # Red: FN
-            baseline_overlay[..., 2] = (baseline_pred & ~gt) * 255  # Blue: FP
-            
-            axes[1, 1].imshow(baseline_overlay.astype(np.uint8), origin='upper')
-            axes[1, 1].set_title('Baseline (Threshold)', fontsize=11, fontweight='bold', color='#8892b0')
+
+            axes[1, 1].imshow(make_xray_overlay(baseline_pred), origin='upper')
+            axes[1, 1].set_title('Baseline (Threshold) — Quantum X-Ray', fontsize=11, fontweight='bold', color='#8892b0')
             axes[1, 1].axis('off')
             axes[1, 1].set_facecolor('#1a1f29')
-            
-            # Ground truth
+
             axes[1, 2].imshow(tunnel_mask, cmap='binary', origin='upper', vmin=0, vmax=1)
             axes[1, 2].set_title('Ground Truth', fontsize=11, fontweight='bold', color='#e0e6ed')
             axes[1, 2].axis('off')
@@ -158,13 +184,17 @@ def create_app(template_folder=None):
         try:
             density_grid, tunnel_mask, metadata = generate_random_grid()
             gzz_grid = gzz_approximation(density_grid, t_evolution=30e-6)
+            # Simulate quantum shot noise: baseline struggles, AI denoises
+            seed_val = metadata.get('seed', 0)
+            gzz_grid = apply_sensor_model(gzz_grid, {'gaussian_sigma': 0.35}, seed=int(seed_val) if seed_val is not None else None)
             
-            # AI prediction
+            # AI prediction (model trained on Gzz)
             prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels = predict_tunnel(gzz_grid)
             ai_dice, ai_iou = compute_metrics(binary_mask, tunnel_mask)
             
-            # Baseline prediction
-            baseline_mask = baseline_predict(gzz_grid, {'z': 2.0, 'min_size': 50})
+            # Baseline: designed for density (low=tunnel). Gzz has high=tunnel, so invert.
+            density_like = -gzz_grid  # tunnel (gzz high) -> low value for baseline
+            baseline_mask = baseline_predict(density_like, {'z': 2.0, 'min_size': 50})
             baseline_dice, baseline_iou = compute_metrics(baseline_mask, tunnel_mask)
             
             img_base64 = create_visualization(density_grid, gzz_grid, prob_map, binary_mask, baseline_mask, tunnel_mask)
@@ -233,8 +263,9 @@ def create_app(template_folder=None):
             # AI prediction on Gzz grid
             prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels = predict_tunnel(gzz_grid)
             
-            # Baseline prediction
-            baseline_mask = baseline_predict(gzz_grid, {'z': 2.0, 'min_size': 50})
+            # Baseline: invert Gzz so low=tunnel for threshold detector
+            density_like = -gzz_grid
+            baseline_mask = baseline_predict(density_like, {'z': 2.0, 'min_size': 50})
             
             # Try to load ground truth if available
             tunnel_mask = None
