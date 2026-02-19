@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
+from typing import Optional, Dict, Any, Tuple, Callable
 
 from graviq.physics import apply_sensor_model, apply_interferometer_model
 
@@ -12,30 +13,30 @@ logger = logging.getLogger(__name__)
 
 class TunnelDataset(Dataset):
     """
-    Dataset for tunnel detection/segmentation from density grids.
+    Dataset for tunnel detection/segmentation from quantum sensor (Gzz) grids.
 
-    Only samples with BOTH density_grid_*.npy and tunnel_mask_*.npy are included.
+    Only samples with BOTH gzz_grid_*.npy and tunnel_mask_*.npy are included.
     Missing masks (or inputs) are skipped without crashing.
 
     Returns:
-        - density_grid: (1, H, W) tensor - input
-        - tunnel_mask: (1, H, W) tensor - ground truth segmentation
+        - input: (1, H, W) tensor - Gzz quantum readout (or density if using legacy data)
+        - mask: (1, H, W) tensor - ground truth segmentation
         - metadata: dict with labels
     """
 
     def __init__(
         self,
-        data_dir,
-        transform=None,
+        data_dir: str,
+        transform: Optional[Callable] = None,
         *,
-        interferometer_cfg: dict | None = None,
+        interferometer_cfg: Optional[Dict[str, Any]] = None,
         sensor_noise: bool = False,
-        sensor_noise_cfg: dict | None = None,
-        seed: int | None = None,
-    ):
+        sensor_noise_cfg: Optional[Dict[str, Any]] = None,
+        seed: Optional[int] = None,
+    ) -> None:
         """
         Args:
-            data_dir: Directory containing density_grid_*.npy, tunnel_mask_*.npy, metadata_*.json
+            data_dir: Directory containing gzz_grid_*.npy, tunnel_mask_*.npy, metadata_*.json
             transform: Optional transforms to apply
             interferometer_cfg: If set, apply atom-interferometer model (phase -> signal) before noise.
             sensor_noise: If True, apply sensor noise model to the input grid only.
@@ -49,7 +50,7 @@ class TunnelDataset(Dataset):
         self.sensor_noise_cfg = sensor_noise_cfg if sensor_noise_cfg is not None else {}
         self.seed = seed
 
-        # Scan data_dir and collect sample_ids where BOTH input and mask exist
+        # Scan data_dir: valid samples must have BOTH gzz_grid (input) and tunnel_mask
         if not os.path.isdir(data_dir):
             raise FileNotFoundError(
                 f"Data directory does not exist: {data_dir}. Run: make data"
@@ -59,12 +60,12 @@ class TunnelDataset(Dataset):
         valid_ids = []
 
         for filename in os.listdir(data_dir):
-            if filename.startswith('density_grid_') and filename.endswith('.npy'):
-                sample_id = filename.replace('density_grid_', '').replace('.npy', '')
+            if filename.startswith('gzz_grid_') and filename.endswith('.npy'):
+                sample_id = filename.replace('gzz_grid_', '').replace('.npy', '')
                 all_input_ids.add(sample_id)
-                density_path = os.path.join(data_dir, f'density_grid_{sample_id}.npy')
+                gzz_path = os.path.join(data_dir, f'gzz_grid_{sample_id}.npy')
                 mask_path = os.path.join(data_dir, f'tunnel_mask_{sample_id}.npy')
-                if os.path.exists(density_path) and os.path.exists(mask_path):
+                if os.path.exists(gzz_path) and os.path.exists(mask_path):
                     valid_ids.append(sample_id)
 
         self.sample_ids = sorted(valid_ids)
@@ -81,17 +82,17 @@ class TunnelDataset(Dataset):
         if not self.sample_ids:
             raise FileNotFoundError(
                 f"No complete samples found in {data_dir}. Each sample needs "
-                "density_grid_*.npy and tunnel_mask_*.npy. Run: make data"
+                "gzz_grid_*.npy and tunnel_mask_*.npy. Run: make data"
             )
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.sample_ids)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
         sample_id = self.sample_ids[idx]
 
         # Load density grid (input)
-        density_path = os.path.join(self.data_dir, f'density_grid_{sample_id}.npy')
+        density_path = os.path.join(self.data_dir, f'gzz_grid_{sample_id}.npy')
         density_grid = np.load(density_path).astype(np.float32)
 
         # Optionally apply interferometer model (phase -> signal) before noise
@@ -142,7 +143,12 @@ class TunnelDataset(Dataset):
         }
 
 
-def get_dataloaders(data_dir, batch_size=8, train_split=0.8, num_workers=0):
+def get_dataloaders(
+    data_dir: str, 
+    batch_size: int = 8, 
+    train_split: float = 0.8, 
+    num_workers: int = 0
+) -> Tuple[DataLoader, DataLoader]:
     """
     Create train and validation dataloaders.
 

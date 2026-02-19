@@ -28,19 +28,19 @@ def main():
     print("SINGLE SAMPLE PREDICTION")
     print("=" * 60)
 
-    density_path = 'training_data/density_grid_000.npy'
+    input_path = 'training_data/gzz_grid_000.npy'
     ground_truth_path = 'training_data/tunnel_mask_000.npy'
-    if os.path.exists(density_path) and os.path.exists(ground_truth_path):
-        density_grid = np.load(density_path)
+    if os.path.exists(input_path) and os.path.exists(ground_truth_path):
+        input_grid = np.load(input_path)
         ground_truth = np.load(ground_truth_path)
-        prob_map, binary_mask, has_tunnel = predict(model, density_grid, device)
+        prob_map, binary_mask, has_tunnel = predict(model, input_grid, device)
         print(f"Detected tunnel: {has_tunnel}")
         print(f"Max probability: {prob_map.max():.4f}")
         print(f"Tunnel pixels: {binary_mask.sum()}")
-        visualize_prediction(density_grid, ground_truth, prob_map, binary_mask,
+        visualize_prediction(input_grid, ground_truth, prob_map, binary_mask,
                              save_path='single_prediction.png', show=False)
     else:
-        print("Skipping single sample (training_data/density_grid_000.npy not found).")
+        print("Skipping single sample (training_data/gzz_grid_000.npy not found).")
 
 
 if __name__ == "__main__":

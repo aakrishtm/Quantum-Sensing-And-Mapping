@@ -25,11 +25,11 @@ class TestDatasetPairs(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         shape = (60, 150)
 
-        # 3 complete pairs: density_grid + tunnel_mask + metadata
+        # 3 complete pairs: gzz_grid (input) + tunnel_mask + metadata
         for i in (1, 2, 3):
             sample_id = f"{i:03d}"
             np.save(
-                os.path.join(self.temp_dir, f"density_grid_{sample_id}.npy"),
+                os.path.join(self.temp_dir, f"gzz_grid_{sample_id}.npy"),
                 np.random.rand(*shape).astype(np.float32),
             )
             np.save(
@@ -41,11 +41,11 @@ class TestDatasetPairs(unittest.TestCase):
             ) as f:
                 json.dump({"has_tunnel": True, "num_tunnels": 1}, f)
 
-        # 2 density grids with NO mask (missing tunnel_mask)
+        # 2 gzz grids with NO mask (missing tunnel_mask)
         for i in (4, 5):
             sample_id = f"{i:03d}"
             np.save(
-                os.path.join(self.temp_dir, f"density_grid_{sample_id}.npy"),
+                os.path.join(self.temp_dir, f"gzz_grid_{sample_id}.npy"),
                 np.random.rand(*shape).astype(np.float32),
             )
             # intentionally no tunnel_mask_{sample_id}.npy
@@ -83,7 +83,7 @@ class TestDatasetSensorNoise(unittest.TestCase):
         for i in (1, 2):
             sample_id = f"{i:03d}"
             np.save(
-                os.path.join(self.temp_dir, f"density_grid_{sample_id}.npy"),
+                os.path.join(self.temp_dir, f"gzz_grid_{sample_id}.npy"),
                 np.random.rand(*shape).astype(np.float32),
             )
             np.save(
@@ -168,7 +168,7 @@ class TestDatasetInterferometer(unittest.TestCase):
         for i in (1, 2):
             sample_id = f"{i:03d}"
             np.save(
-                os.path.join(self.temp_dir, f"density_grid_{sample_id}.npy"),
+                os.path.join(self.temp_dir, f"gzz_grid_{sample_id}.npy"),
                 np.random.rand(*shape).astype(np.float32),
             )
             np.save(
@@ -187,7 +187,7 @@ class TestDatasetInterferometer(unittest.TestCase):
 
     def test_interferometer_output_diffs_from_raw_and_in_01(self):
         """With interferometer_cfg set and no sensor noise, input differs from raw grid and is in [0, 1]."""
-        raw_path = os.path.join(self.temp_dir, "density_grid_001.npy")
+        raw_path = os.path.join(self.temp_dir, "gzz_grid_001.npy")
         raw_grid = np.load(raw_path).astype(np.float32)
 
         ds = TunnelDataset(
@@ -200,7 +200,7 @@ class TestDatasetInterferometer(unittest.TestCase):
 
         self.assertFalse(
             np.allclose(raw_grid, input_grid),
-            "Interferometer readout should differ from raw density grid",
+            "Interferometer readout should differ from raw input grid",
         )
         self.assertGreaterEqual(float(np.min(input_grid)), 0.0, "Interferometer signal should be >= 0")
         self.assertLessEqual(float(np.max(input_grid)), 1.0, "Interferometer signal should be <= 1")

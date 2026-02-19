@@ -6,8 +6,10 @@ PIP ?= pip3
 install:
 	$(PIP) install -e .
 
+# Density grids first, then Qiskit-simulated Gzz (quantum sensor) grids; chain so Gzz runs only if density succeeds
 data:
-	$(PYTHON) density_grid_generator.py
+	$(PYTHON) density_grid_generator.py && \
+	$(PYTHON) generate_gzz_grids.py --shots 500
 
 train:
 	$(PYTHON) scripts/train.py
