@@ -44,24 +44,44 @@ def create_app(template_folder=None):
         tunnel_pixels = int(binary_mask.sum())
         return prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels
 
-    def create_visualization(density_grid, gzz_grid, prob_map, binary_mask):
+    def create_visualization(density_grid, gzz_grid, prob_map, binary_mask, tunnel_mask=None):
+        #We keep 4 plots, but the 4th one becomes the "X-Ray" if ground truth exists
         fig, axes = plt.subplots(1, 4, figsize=(18, 4))
+
+        #1. Density Grid
         im0 = axes[0].imshow(density_grid, cmap='inferno', origin='upper')
         axes[0].set_title('Density Grid', fontsize=12, fontweight='bold')
         axes[0].axis('off')
-        plt.colorbar(im0, ax=axes[0], label='Density', fraction=0.046)
+
+        #2. Quantum Sensor Data
         im1 = axes[1].imshow(gzz_grid, cmap='viridis', origin='upper')
         axes[1].set_title('Gzz Grid (Quantum)', fontsize=12, fontweight='bold')
         axes[1].axis('off')
-        plt.colorbar(im1, ax=axes[1], label='Gzz', fraction=0.046)
+
+        #3. Raw AI Confidence
         im2 = axes[2].imshow(prob_map, cmap='hot', origin='upper', vmin=0, vmax=1)
-        axes[2].set_title('Tunnel Probability', fontsize=12, fontweight='bold')
+        axes[2].set_title('AI Confidence Map', fontsize=12, fontweight='bold')
         axes[2].axis('off')
-        plt.colorbar(im2, ax=axes[2], label='Prob', fraction=0.046)
-        im3 = axes[3].imshow(binary_mask, cmap='binary', origin='upper', vmin=0, vmax=1)
-        axes[3].set_title('Detected Tunnels', fontsize=12, fontweight='bold')
+
+        #4. X-Ray of Detected Tunnels
+        if tunnel_mask is not None:
+            #Create RGB overlay: Green = Correct, Red = Missed, Blue = False Positive
+            h, w = binary_mask.shape
+            xray = np.zeros((h, w, 3), dtype=np.uint8)
+            pred = (binary_mask > 0.5)
+            gt = (tunnel_mask > 0.5)
+
+            xray[..., 1] = (pred & gt) * 255 #Green: True Positive
+            xray[..., 0] = (gt & ~pred) * 255 #Red: False Negative
+            xray[..., 2] = (pred & ~gt) * 255 #Blue: False Positive
+
+            axes[3].imshow(xray.astype(np.uint8), origin='upper')
+            axes[3].set_title('Quantum X-Ray Analysis', fontsize=12, fontweight='bold')
+        else:
+            axes[3].imshow(binary_mask, cmap='binary', origin='upper', vmin=0, vmax=1)
+            axes[3].set_title('Detected Tunnels', fontsize=12, fontweight='bold')
+
         axes[3].axis('off')
-        plt.colorbar(im3, ax=axes[3], fraction=0.046)
         plt.tight_layout()
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
@@ -73,7 +93,7 @@ def create_app(template_folder=None):
     def generate_random_grid():
         seed = random.randint(0, 10000)
         grid, tunnel_mask, metadata = make_grid(seed)
-        return grid, metadata
+        return grid, tunnel_mask, metadata
 
     @app.route('/')
     def index():
@@ -82,10 +102,10 @@ def create_app(template_folder=None):
     @app.route('/generate', methods=['POST'])
     def generate():
         try:
-            density_grid, metadata = generate_random_grid()
+            density_grid, tunnel_mask, metadata = generate_random_grid()
             gzz_grid = gzz_approximation(density_grid, t_evolution=30e-6)
             prob_map, binary_mask, has_tunnel, confidence, tunnel_pixels = predict_tunnel(density_grid)
-            img_base64 = create_visualization(density_grid, gzz_grid, prob_map, binary_mask)
+            img_base64 = create_visualization(density_grid, gzz_grid, prob_map, binary_mask, tunnel_mask)
             return jsonify({
                 'success': True,
                 'image': img_base64,
