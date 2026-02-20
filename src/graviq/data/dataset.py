@@ -95,32 +95,31 @@ class TunnelDataset(Dataset):
         gzz_path = os.path.join(self.data_dir, f'gzz_grid_{sample_id}.npy')
         gzz_grid = np.load(gzz_path).astype(np.float32)
 
-        # 2. INJECT NOISE DURING TRAINING
+ # 2. INJECT NOISE DURING TRAINING
         # We force the model to see noise so it learns to be a "denoiser"
-        # Using a random sigma makes the AI robust to different noise levels
-        noise_sigma = float(np.random.uniform(1.0, 2.5))
-        gzz_grid = apply_sensor_model(gzz_grid, {'gaussian_sigma': noise_sigma}, seed=None)
-        gzz_grid = np.asarray(gzz_grid, dtype=np.float32)
+        # Using a random sigma makes the AI robust to different noise levels        if self.interferometer_cfg:
+            gzz_grid = apply_interferometer_model(
+            gzz_grid, self.interferometer_cfg, seed=None)
+            gzz_grid = np.asarray(gzz_grid, dtype=np.float32)
 
-        # 3. MATCH FLASK LOGIC: Flip Sign and Normalize
-        g = -gzz_grid  # Flip so tunnels are peaks
-        g_min = g.min()
-        g_max = g.max()
-        if g_max - g_min < 1e-9:
-            g_norm = np.zeros_like(g)
-        else:
-            g_norm = (g - g_min) / (g_max - g_min)
+        # Optionally apply sensor noise to input only (never to mask)
+        if self.sensor_noise:
+            # Deterministic per (seed, idx) pair so CI can verify reproducibility
+            noise_seed = (self.seed + idx) if self.seed is not None else None
+            gzz_grid = apply_sensor_model(
+            gzz_grid, self.sensor_noise_cfg, seed=noise_seed)
+            gzz_grid = np.asarray(gzz_grid, dtype=np.float32)
 
-        # 4. Load ground truth mask
+        # Load ground truth mask
         mask_path = os.path.join(self.data_dir, f'tunnel_mask_{sample_id}.npy')
         tunnel_mask = np.load(mask_path).astype(np.float32)
 
         # Add channel dimension: (H, W) -> (1, H, W)
-        g_norm = g_norm[np.newaxis, ...]
+        gzz_grid = gzz_grid[np.newaxis, ...]
         tunnel_mask = tunnel_mask[np.newaxis, ...]
 
         # Convert to tensors
-        input_tensor = torch.from_numpy(g_norm).float()
+        input_tensor = torch.from_numpy(gzz_grid).float()
         mask_tensor = torch.from_numpy(tunnel_mask).float()
 
         # Load metadata
