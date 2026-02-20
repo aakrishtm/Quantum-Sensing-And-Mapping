@@ -91,24 +91,30 @@ class TunnelDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         sample_id = self.sample_ids[idx]
 
-        # 1. Load the clean Gzz grid
+        # Load input grid
         gzz_path = os.path.join(self.data_dir, f'gzz_grid_{sample_id}.npy')
         gzz_grid = np.load(gzz_path).astype(np.float32)
 
- # 2. INJECT NOISE DURING TRAINING
-        # We force the model to see noise so it learns to be a "denoiser"
-        # Using a random sigma makes the AI robust to different noise levels        if self.interferometer_cfg:
+        if self.interferometer_cfg:
             gzz_grid = apply_interferometer_model(
-            gzz_grid, self.interferometer_cfg, seed=None)
+                gzz_grid, self.interferometer_cfg, seed=None
+            )
             gzz_grid = np.asarray(gzz_grid, dtype=np.float32)
 
-        # Optionally apply sensor noise to input only (never to mask)
         if self.sensor_noise:
-            # Deterministic per (seed, idx) pair so CI can verify reproducibility
             noise_seed = (self.seed + idx) if self.seed is not None else None
             gzz_grid = apply_sensor_model(
-            gzz_grid, self.sensor_noise_cfg, seed=noise_seed)
+                gzz_grid, self.sensor_noise_cfg, seed=noise_seed
+            )
             gzz_grid = np.asarray(gzz_grid, dtype=np.float32)
+
+        # Match app_flask predict_tunnel: flip so tunnels are peaks, then min-max to [0,1]
+        g = -gzz_grid
+        g_min, g_max = g.min(), g.max()
+        if g_max - g_min < 1e-9:
+            gzz_grid = np.zeros_like(g, dtype=np.float32)
+        else:
+            gzz_grid = ((g - g_min) / (g_max - g_min)).astype(np.float32)
 
         # Load ground truth mask
         mask_path = os.path.join(self.data_dir, f'tunnel_mask_{sample_id}.npy')
@@ -158,8 +164,13 @@ def get_dataloaders(
     Returns:
         train_loader, val_loader
     """
-    # Load full dataset
-    full_dataset = TunnelDataset(data_dir)
+    # Load full dataset with sensor noise (matches app's noisy Gzz at inference)
+    full_dataset = TunnelDataset(
+        data_dir,
+        sensor_noise=True,
+        sensor_noise_cfg={"gaussian_sigma": 2.0},
+        seed=42,
+    )
 
     # Split into train/val
     dataset_size = len(full_dataset)
