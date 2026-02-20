@@ -49,53 +49,57 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel, phase_damping_error
 
 def get_batch_gzz(density_values, t_evolution=30e-6, shots=500):
-    """Runs quantum simulations in a single batch for the whole grid."""
-    backend = AerSimulator(method='density_matrix') # Optimized for noise
+    # CRITICAL: Re-enable GPU device here
+    backend = AerSimulator(method='density_matrix', device='GPU')
     
-    # 1. Prepare all circuits at once
-    circuits = []
-    for rho in density_values.flatten():
-        qc = QuantumCircuit(1, 1)
-        qc.h(0)
-        qc.delay(int(t_evolution * 1e9), 0, unit="ns")
-        qc.h(0)
-        qc.measure(0, 0)
-        
-        # We define a custom noise model for THIS specific rho
-        p = 1 - np.exp(-rho * t_evolution)
-        error = phase_damping_error(np.clip(p, 0, 1))
-        noise_model = NoiseModel()
-        noise_model.add_quantum_error(error, ["delay"], [0])
-        
-        # Transpile once
-        qc_t = transpile(qc, backend)
-        circuits.append((qc_t, noise_model))
-
-    # 2. Execute in a way that doesn't crash RAM
-    # To be safe at 3AM, we run in chunks of 500 pixels
+    rows, cols = density_values.shape
+    flat_density = density_values.flatten()
     results_gzz = []
-    for i in range(0, len(circuits), 500):
-        chunk = circuits[i:i+500]
-        for qc, nm in chunk:
-            res = backend.run(qc, noise_model=nm, shots=shots).result()
+
+    # Process in chunks of 1000 pixels to keep the GPU pipeline saturated but safe
+    chunk_size = 1000
+    for i in range(0, len(flat_density), chunk_size):
+        chunk_rho = flat_density[i:i+chunk_size]
+        circuits = []
+        
+        for rho in chunk_rho:
+            qc = QuantumCircuit(1, 1)
+            qc.h(0)
+            qc.delay(int(t_evolution * 1e9), 0, unit="ns")
+            qc.h(0)
+            qc.measure(0, 0)
+            
+            p = 1 - np.exp(-rho * t_evolution)
+            error = phase_damping_error(np.clip(p, 0, 1))
+            noise_model = NoiseModel()
+            noise_model.add_quantum_error(error, ["delay"], [0])
+            
+            # Transpile for the GPU backend
+            qc_t = transpile(qc, backend)
+            
+            # Execute immediately in the chunk
+            res = backend.run(qc_t, noise_model=noise_model, shots=shots).result()
             counts = res.get_counts()
             p0 = counts.get('0', 0) / shots
             results_gzz.append(2.0 * p0 - 1.0)
             
-    return np.array(results_gzz).reshape(density_values.shape)
+    return np.array(results_gzz).reshape(rows, cols)
 
 def process_training_data(data_dir='training_data'):
     files = sorted([f for f in os.listdir(data_dir) if f.startswith('density_grid_')])
-    print(f"Running Quantum Batch Sim for {len(files)} samples...")
+    print(f"Executing H100 GPU Accelerated Quantum Sim for {len(files)} samples...")
     
     for fname in files:
         sid = fname.replace('density_grid_', '').replace('.npy', '')
-        density = np.load(os.path.join(data_dir, fname))
+        gzz_path = os.path.join(data_dir, f'gzz_grid_{sid}.npy')
         
-        # This will be slower than NumPy, but 100x faster than your original
+        if os.path.exists(gzz_path):
+            continue
+
+        density = np.load(os.path.join(data_dir, fname))
         gzz = get_batch_gzz(density) 
-        np.save(os.path.join(data_dir, f'gzz_grid_{sid}.npy'), gzz)
-        print(f"Sample {sid} complete via AerSimulator.")
+        np.save(gzz_path, gzz)
+        print(f"Sample {sid} complete via H100 GPU.")
 
 if __name__ == "__main__":
     process_training_data()
