@@ -35,14 +35,29 @@ class DiceLoss(nn.Module):
         return 1 - dice
 
 
+def compute_pos_weight(train_loader, device='cpu'):
+    """pos_weight = neg_count / pos_count for BCEWithLogitsLoss (minority=tunnel)."""
+    pos_count = 0.0
+    neg_count = 0.0
+    for batch in train_loader:
+        m = batch['mask']
+        pos_count += (m > 0.5).float().sum().item()
+        neg_count += (m <= 0.5).float().sum().item()
+    if pos_count == 0:
+        return torch.tensor([1.0], device=device)
+    ratio = neg_count / (pos_count + 1e-9)
+    ratio = max(1.0, min(100.0, float(ratio)))
+    return torch.tensor([ratio], dtype=torch.float32, device=device)
+
+
 class CombinedLoss(nn.Module):
     """Combination of BCE and Dice loss"""
 
-    def __init__(self, bce_weight=0.5, dice_weight=0.5):
+    def __init__(self, pos_weight, bce_weight=0.3, dice_weight=0.7, device='cpu'):
         super().__init__()
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
-        self.bce = nn.BCEWithLogitsLoss()
+        self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         self.dice = DiceLoss()
 
     def forward(self, predictions, targets):
@@ -187,9 +202,13 @@ def train(
         num_workers=0
     )
 
+    print("Computing pos_weight from train set...")
+    pos_weight = compute_pos_weight(train_loader, device)
+    print(f"  pos_weight (neg/pos): {pos_weight.item():.2f}")
+
     print("Initializing model...")
     model = get_model(device)
-    criterion = CombinedLoss(bce_weight=0.5, dice_weight=0.5)
+    criterion = CombinedLoss(pos_weight=pos_weight, bce_weight=0.3, dice_weight=0.7, device=device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=10
