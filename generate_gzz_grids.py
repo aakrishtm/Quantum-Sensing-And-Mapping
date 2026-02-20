@@ -5,15 +5,20 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel, phase_damping_error
 
 def get_batch_gzz(density_values, t_evolution=30e-6, shots=500):
-    # Use the specific GPU backend directly
-    backend = AerSimulator(method='density_matrix', device='GPU')
+    # Initialize the base simulator
+    backend = AerSimulator(method='density_matrix')
+    
+    # Dynamically select GPU if available, else fallback to CPU to save CI/CD
+    if 'GPU' in backend.available_devices():
+        backend.set_options(device='GPU')
+    else:
+        backend.set_options(device='CPU')
     
     rows, cols = density_values.shape
     flat_density = density_values.flatten()
     results_gzz = []
 
-    # To fix the 'setstate' error, we avoid repeated transpilation
-    # We use a single template circuit since the structure doesn't change
+    # Single template circuit prevents the transpile() memory leak
     template_qc = QuantumCircuit(1, 1)
     template_qc.h(0)
     template_qc.delay(int(t_evolution * 1e9), 0, unit="ns")
@@ -25,13 +30,11 @@ def get_batch_gzz(density_values, t_evolution=30e-6, shots=500):
     for i in range(0, len(flat_density), chunk_size):
         chunk_rho = flat_density[i:i+chunk_size]
         for rho in chunk_rho:
-            # Update only the noise model per pixel
             p = 1 - np.exp(-rho * t_evolution)
             error = phase_damping_error(np.clip(p, 0, 1))
             noise_model = NoiseModel()
             noise_model.add_quantum_error(error, ["delay"], [0])
             
-            # Run directly - skipping the explicit transpile() call fixes the bug
             job = backend.run(template_qc, noise_model=noise_model, shots=shots)
             counts = job.result().get_counts()
             p0 = counts.get('0', 0) / shots
