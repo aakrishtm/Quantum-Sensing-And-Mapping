@@ -22,6 +22,8 @@ To run the web demo: `make run-app` or `python app.py`.
 
 **If port 5000 is already in use:** run on another port, e.g. `PORT=5001 make run-app` or `PORT=5001 python app.py`.
 
+**Gzz generation (GPU):** The `make data` step runs Qiskit quantum simulation to produce Gzz grids. For GPU acceleration, install `qiskit-aer-gpu` (replaces `qiskit-aer` with CUDA support). On an H100 or other CUDA-capable GPU, the script will use the GPU automatically. Without it, simulations run on CPU (use `--device CPU` if needed).
+
 ## Development
 
 - **Train:** `make train` (calls `scripts/train.py`).
