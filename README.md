@@ -7,7 +7,8 @@
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 GraviQ is an ongoing, months-long independent research project in **quantum gravimetry** and **inverse problems**.  
-The goal is to prototype an end-to-end pipeline that simulates a cold-atom–based quantum gravimeter, generates synthetic gravity-gradient data with realistic quantum noise, and trains deep models to recover subsurface structure (voids, tunnels, ore bodies) from those measurements.
+
+The end goal is to prototype an end-to-end pipeline that simulates a cold-atom–based quantum gravimeter, generates synthetic gravity-gradient data with realistic quantum noise, and trains deep models to recover subsurface structure (voids, tunnels, ore bodies) from those measurements.
 
 ---
 
@@ -17,16 +18,16 @@ Conventional gravimetry workflows use classical forward models and deterministic
 GraviQ treats the entire stack as software:
 
 - Synthetic **3D density models** of the subsurface (rock, void, ore)  
-- Quantum forward model of a **cold-atom interferometer** measuring the vertical gravity gradient \(G_{zz}\)  
+- Quantum forward model of a **cold-atom interferometer** measuring the vertical gravity gradient $G_{zz}$  
 - A U-Net–style inverse model that infers **subsurface tunnels and anomalies** from 2D gravity slices
 
-The project is intentionally structured as a research-grade quantum SWE codebase: reproducible, configurable, and designed for rapid iteration on physics and ML components.
+The project is intentionally reproducible, configurable, and designed for rapid iteration on physics and ML components.
 
 ---
 
 ### Project Overview
 
-**Problem statement.** Given noisy 2D measurements of the gravity gradient \(G_{zz}(x, z)\) at the surface, reconstruct a discretized 3D density field \(\rho(x, y, z)\) capturing:
+**Problem statement.** Given noisy 2D measurements of the gravity gradient $G_{zz}(x, z)$ at the surface, reconstruct a discretized 3D density field $\rho(x, y, z)$ capturing:
 
 - low-density **voids** and tunnels  
 - high-density **ore** or mineralization  
@@ -36,7 +37,7 @@ In the current implementation, GraviQ solves a reduced but representative versio
 
 - **Forward direction**:  
   - Generate 2D density cross-sections with stochastic tunnels and ore bodies.  
-  - Simulate a **quantum cold-atom interferometer** sampling an effective \(G_{zz}\) field over a \(60 \times 150\) grid.  
+  - Simulate a **quantum cold-atom interferometer** sampling an effective $G_{zz}$ field over a $60 \times 150$ grid.  
   - Inject realistic noise (phase damping, Gaussian readout noise) to approximate hardware behaviour on an H100-class GPU.
 
 - **Inverse direction**:  
@@ -80,7 +81,7 @@ The longer-term trajectory is a full 3D voxelized inverse problem (see “Active
 
 Density grids and labels are created by `density_grid_generator.py`:
 
-- The subsurface is discretized into a \(60 \times 150\) grid with rock, void, and ore densities.  
+- The subsurface is discretized into a $60 \times 150$ grid with rock, void, and ore densities.  
 - Tunnels are drawn as curved low-density paths with variable length, thickness, and curvature.  
 - Each sample produces:
   - `density_grid_XXX.npy` — density field  
@@ -91,11 +92,11 @@ Density grids and labels are created by `density_grid_generator.py`:
 
 `generate_gzz_grids.py` replaces classical approximations with a **Ramsey interferometer** on a Qiskit Aer density-matrix backend:
 
-- For each quantized density level \(\rho\):
+- For each quantized density level $\rho$:
   - Build a single-qubit Ramsey circuit:  
-    \( H \rightarrow \text{delay}(T) \rightarrow H \rightarrow \text{measure} \)
+    $ H \rightarrow \text{delay}(T) \rightarrow H \rightarrow \text{measure} $
   - Construct a phase-damping channel with probability  
-    \( p(\rho, T) = 1 - e^{-\rho T} \)  
+    $ p(\rho, T) = 1 - e^{-\rho T} $  
   - Attach the channel as noise (`phase_damping_error`) via a `NoiseModel`.
 - Group pixels by rounded density to **batch circuits** and maximize GPU occupancy:
 
@@ -116,7 +117,7 @@ gzz_values = [
 ]
 ```
 
-- Output: `gzz_grid_XXX.npy` (shape \(60 \times 150\), `float32`) stays **API-compatible** with the fast approximation so downstream PyTorch code is unchanged.
+- Output: `gzz_grid_XXX.npy` (shape $60 \times 150$, `float32`) stays **API-compatible** with the fast approximation so downstream PyTorch code is unchanged.
 - Runtime robustness: if `qiskit-aer-gpu` or CUDA drivers are missing, the generator **automatically falls back** to CPU (`device="CPU"`), keeping CI green.
 
 #### 3. Data pipeline and augmentation
@@ -125,11 +126,11 @@ The training dataset (`src/graviq/data/dataset.py`) is centered on `TunnelDatase
 
 - Loads `gzz_grid_*.npy` and `tunnel_mask_*.npy` pairs.  
 - Optional **interferometer** and **sensor noise** stages:
-  - `apply_interferometer_model` — phase shift \( \Delta \phi = k_{\text{eff}} a T^2 \), optional wrapping to \([- \pi, \pi]\), then signal mapping.  
+  - `apply_interferometer_model` — phase shift $ \Delta \phi = k_{\text{eff}} a T^2 $, optional wrapping to $[- \pi, \pi]$, then signal mapping.  
   - `apply_sensor_model` — Gaussian noise and blur, with deterministic per-sample seeding.
 - Preprocessing matches the deployed Flask app:
   - Flip sign so tunnels become high-response peaks.  
-  - Per-sample min-max normalization to \([0, 1]\).  
+  - Per-sample min-max normalization to $[0, 1]$.  
   - Channel-first tensors `(1, H, W)` are returned.
 
 On top of this, the dataloader applies **on-the-fly spatial augmentation**:
@@ -180,7 +181,7 @@ Training logic lives in `src/graviq/training.py`:
 - **Loss**: combined BCEWithLogits + Dice with:
   - `pos_weight` computed from the training set (tunnel = minority class).  
   - Tunable `bce_weight` / `dice_weight` (default 0.3 / 0.7).  
-  - **Binary label smoothing** (default \(\epsilon = 0.05\)):  
+  - **Binary label smoothing** (default $\epsilon = 0.05$):  
     targets are nudged toward 0.5 to dampen gradient spikes and hard overconfidence.
 
 - **Scheduler**: `ReduceLROnPlateau` on validation loss to automatically shrink the learning rate when the valley stalls.
@@ -229,14 +230,14 @@ The active research focus is on **robustness under realistic quantum noise** and
 
 1. **3D volumetric inverse model**
    - Extend from 2D cross-sections to full **3D voxel volumes** with 3D convolutions and skip connections.  
-   - Target resolutions of \(60 \times 150 \times 60\) (>\(5.4 \times 10^5\) voxels) with memory-aware tiling on H100-class GPUs.
+   - Target resolutions of $60 \times 150 \times 60$ (>$5.4 \times 10^5$ voxels) with memory-aware tiling on H100-class GPUs.
 
 2. **Parameterized quantum circuits for 3D forward models**
    - Replace per-pixel Ramsey circuits with **parameterized quantum circuits** that share structure across voxels.  
    - Exploit Qiskit Aer GPU batching and (optionally) Cirq-based parameter sweeps to maximize throughput and reduce compilation overhead for large 3D grids.
 
 3. **Full gravity-gradient tensor and multi-class segmentation**
-   - Upgrade from scalar \(G_{zz}\) to the full gravity-gradient tensor \(G_{ij}\) (e.g., \(G_{xy}, G_{xz}, G_{yz}\)).  
+   - Upgrade from scalar $G_{zz}$ to the full gravity-gradient tensor $G_{ij}$ (e.g., $G_{xy}, G_{xz}, G_{yz}$).  
    - Extend labels from binary (tunnel vs background) to **multi-class segmentation** (e.g., void, standard rock, high-density ore, rare earth deposits).  
    - Investigate cross-component consistency losses that couple predictions across different tensor components.
 
@@ -282,5 +283,4 @@ mask = batch["mask"]      # (B, 1, 60, 150), ground-truth tunnel mask
 print(gzz.shape, mask.shape, gzz.min().item(), gzz.max().item())
 ```
 
-This provides a compact, research-grade starting point for experimenting with quantum gravimetry inverse problems, alternative simulators, and robust deep inverse models.  
-The codebase is intentionally modular so both the **quantum forward model** and the **ML inverse model** can be swapped or extended with minimal friction.
+This provides a compact starting point for experimenting with quantum gravimetry inverse problems, alternative simulators, and robust deep inverse models. The codebase is intentionally modular so both the **quantum forward model** and the **ML inverse model** can be swapped or extended with minimal friction.
