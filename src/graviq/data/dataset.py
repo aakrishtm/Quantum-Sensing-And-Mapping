@@ -137,13 +137,64 @@ class TunnelDataset(Dataset):
             has_tunnel = bool(np.any(tunnel_mask > 0.5))
             metadata = {'has_tunnel': has_tunnel, 'num_tunnels': 1 if has_tunnel else 0}
 
-        return {
+        sample = {
             'input': input_tensor,
             'mask': mask_tensor,
             'has_tunnel': metadata['has_tunnel'],
             'num_tunnels': metadata['num_tunnels'],
             'sample_id': sample_id
         }
+
+        # Optional per-sample transform (for data augmentation)
+        if self.transform is not None:
+            sample = self.transform(sample)
+
+        return sample
+
+
+class RandomFlipAugment:
+    """
+    Simple spatial data augmentation for 2D grids.
+
+    Applies random horizontal / vertical flips to both input and mask,
+    preserving alignment.
+    """
+
+    def __init__(self, p_horizontal: float = 0.5, p_vertical: float = 0.5):
+        self.p_horizontal = float(p_horizontal)
+        self.p_vertical = float(p_vertical)
+
+    def __call__(self, sample: Dict[str, Any]) -> Dict[str, Any]:
+        x = sample['input']
+        m = sample['mask']
+
+        if torch.rand(1).item() < self.p_horizontal:
+            x = torch.flip(x, dims=[2])
+            m = torch.flip(m, dims=[2])
+        if torch.rand(1).item() < self.p_vertical:
+            x = torch.flip(x, dims=[1])
+            m = torch.flip(m, dims=[1])
+
+        sample['input'] = x
+        sample['mask'] = m
+        return sample
+
+
+class _TransformDataset(torch.utils.data.Dataset):
+    """
+    Lightweight wrapper to apply a transform on top of an existing dataset or Subset.
+    """
+
+    def __init__(self, base_dataset: torch.utils.data.Dataset, transform: Callable):
+        self.base_dataset = base_dataset
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return len(self.base_dataset)
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        sample = self.base_dataset[idx]
+        return self.transform(sample)
 
 
 def get_dataloaders(
@@ -181,6 +232,12 @@ def get_dataloaders(
         full_dataset,
         [train_size, val_size],
         generator=torch.Generator().manual_seed(42)  # Reproducible split
+    )
+
+    # Wrap train split with on-the-fly spatial augmentation; keep val clean.
+    train_dataset = _TransformDataset(
+        train_dataset,
+        transform=RandomFlipAugment(p_horizontal=0.5, p_vertical=0.5),
     )
 
     # Create dataloaders

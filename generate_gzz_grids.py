@@ -4,7 +4,6 @@ Generate Gzz grids from density grids via Qiskit GPU quantum simulation.
 Uses a Ramsey interferometer circuit with density-dependent phase damping to model
 realistic atom-interferometer gravimetry. 
 """
-
 from __future__ import annotations
 
 import argparse
@@ -13,7 +12,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 from qiskit import QuantumCircuit, transpile
-from qiskit_aer import AerSimulator
+from qiskit_aer import AerSimulator, AerError
 from qiskit_aer.noise import NoiseModel, phase_damping_error
 
 # -----------------------------------------------------------------------------
@@ -46,10 +45,22 @@ def _build_simulator(device: str = "GPU") -> AerSimulator:
     Instantiate AerSimulator configured for GPU.
     Requires qiskit-aer-gpu on CUDA-capable systems.
     """
-    return AerSimulator(
-        method="density_matrix",
-        device=device,
-    )
+    try:
+        return AerSimulator(
+            method="density_matrix",
+            device=device,
+        )
+    except AerError as exc:
+        # Graceful fallback when GPU support or CUDA drivers are missing.
+        # This is critical for CPU-only CI environments while still enabling
+        # H100-class acceleration in production.
+        if device.upper() == "GPU":
+            print(
+                f"[generate_gzz_grids] GPU device requested but unavailable "
+                f"({exc}). Falling back to CPU density-matrix simulator."
+            )
+            return AerSimulator(method="density_matrix", device="CPU")
+        raise
 
 
 def _counts_to_gzz(counts: Dict[str, int], shots: int) -> float:

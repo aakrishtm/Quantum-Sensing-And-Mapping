@@ -51,16 +51,28 @@ def compute_pos_weight(train_loader, device='cpu'):
 
 
 class CombinedLoss(nn.Module):
-    """Combination of BCE and Dice loss"""
+    """Combination of BCE and Dice loss with optional label smoothing"""
 
-    def __init__(self, pos_weight, bce_weight=0.3, dice_weight=0.7, device='cpu'):
+    def __init__(
+        self,
+        pos_weight,
+        bce_weight: float = 0.3,
+        dice_weight: float = 0.7,
+        label_smoothing: float = 0.05,
+        device: str = 'cpu',
+    ):
         super().__init__()
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
+        self.label_smoothing = float(label_smoothing)
         self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         self.dice = DiceLoss()
 
     def forward(self, predictions, targets):
+        # Binary label smoothing: move hard labels slightly toward 0.5
+        if self.label_smoothing > 0.0:
+            eps = self.label_smoothing
+            targets = targets * (1.0 - eps) + 0.5 * eps
         bce_loss = self.bce(predictions, targets)
         dice_loss = self.dice(predictions, targets)
         return self.bce_weight * bce_loss + self.dice_weight * dice_loss
@@ -208,7 +220,13 @@ def train(
 
     print("Initializing model...")
     model = get_model(device)
-    criterion = CombinedLoss(pos_weight=pos_weight, bce_weight=0.3, dice_weight=0.7, device=device)
+    criterion = CombinedLoss(
+        pos_weight=pos_weight,
+        bce_weight=0.3,
+        dice_weight=0.7,
+        label_smoothing=0.05,
+        device=device,
+    )
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=10
